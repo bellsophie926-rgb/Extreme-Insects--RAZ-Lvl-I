@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extreme Insects - 晓漾的魔法点读机</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body { background-color: #f0fdf4; font-family: 'Comic Sans MS', 'Chalkboard SE', sans-serif; }
+        
+        .vocab-word { 
+            color: #2563eb; 
+            font-weight: 800; 
+            cursor: pointer; 
+            position: relative;
+            display: inline-block;
+            padding: 0 4px;
+            transition: all 0.2s ease;
+        }
+        .vocab-word::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 4px;
+            bottom: 0;
+            left: 0;
+            background-color: #bfdbfe;
+            z-index: -1;
+            transition: height 0.2s ease;
+        }
+        .vocab-word:hover { color: #1e3a8a; }
+        .vocab-word:hover::after { height: 100%; background-color: #dbeafe; border-radius: 4px; }
+        
+        .book-text-content {
+            font-size: 1.4rem; 
+            line-height: 2.2;  
+            color: #334155;
+            letter-spacing: 0.02em;
+        }
+        .book-text-content p { margin-bottom: 1.5rem; }
+        
+        #toast { transition: opacity 0.3s ease, transform 0.3s ease; }
+        .tab-active { background-color: #22c55e; color: white; transform: scale(1.05); box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .tab-inactive { background-color: #f1f5f9; color: #475569; }
+        .tab-inactive:hover { background-color: #e2e8f0; }
+        
+        .perspective-1000 { perspective: 1000px; }
+        .transform-style-3d { transform-style: preserve-3d; }
+        .backface-hidden { backface-visibility: hidden; }
+        .rotate-y-180 { transform: rotateY(180deg); }
+        
+        .memory-card { transition: transform 0.3s, opacity 0.3s; }
+        .memory-card.flipped { transform: rotateY(180deg); }
+        .memory-card.matched { opacity: 0; pointer-events: none; }
+        
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #86efac; border-radius: 10px; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col items-center">
+
+    <div class="w-full max-w-6xl mb-6 flex flex-col md:flex-row justify-between items-center bg-white p-4 rounded-3xl shadow-md border-4 border-green-400 shrink-0">
+        <h1 class="text-2xl md:text-3xl font-black text-green-700 mb-4 md:mb-0 tracking-wide">
+            <i class="fa-solid fa-bug mr-2 animate-bounce"></i> Extreme Insects
+        </h1>
+        <div class="flex flex-wrap justify-center gap-3">
+            <button id="tabVocab" onclick="switchTab('vocab')" class="tab-active px-5 py-2 rounded-full font-bold transition">
+                <i class="fa-solid fa-clone mr-1"></i> 3D 生词卡
+            </button>
+            <button id="tabGame" onclick="switchTab('game')" class="tab-inactive px-5 py-2 rounded-full font-bold transition">
+                <i class="fa-solid fa-gamepad mr-1"></i> 翻牌挑战
+            </button>
+            <button id="tabBook" onclick="switchTab('book')" class="tab-inactive px-5 py-2 rounded-full font-bold transition">
+                <i class="fa-solid fa-book-open-reader mr-1"></i> 互动绘本
+            </button>
+        </div>
+    </div>
+
+    <div id="viewVocab" class="w-full max-w-6xl">
+        <div class="bg-green-50 rounded-2xl p-4 mb-6 text-center text-green-800 font-bold border-2 border-green-200 shadow-sm">
+            💡 点击卡片翻转查看中文释义，点击喇叭听发音！
+        </div>
+        <div id="vocabGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+    </div>
+
+    <div id="viewGame" class="w-full max-w-6xl hidden flex-col items-center bg-white rounded-3xl shadow-lg border-4 border-yellow-400 p-6 md:p-8">
+        <div class="flex flex-col md:flex-row justify-between items-center w-full mb-6 space-y-4 md:space-y-0">
+            <h2 class="text-2xl md:text-3xl font-black text-yellow-600"><i class="fa-solid fa-puzzle-piece"></i> 记忆翻牌挑战</h2>
+            <div class="flex space-x-2 bg-gray-100 p-1 rounded-full border-2 border-gray-200">
+                <button onclick="initGame(1)" id="btnLevel1" class="bg-yellow-500 text-white px-4 py-2 rounded-full font-bold shadow-sm transition">第一关 (1-12)</button>
+                <button onclick="initGame(2)" id="btnLevel2" class="bg-transparent text-gray-500 hover:text-gray-700 px-4 py-2 rounded-full font-bold transition">第二关 (13-24)</button>
+            </div>
+            <div class="text-xl font-bold text-gray-700 bg-yellow-100 px-4 py-2 rounded-lg border-2 border-yellow-300">
+                进度: <span id="matchCount" class="text-yellow-600">0</span>/12
+            </div>
+        </div>
+        <p class="text-gray-500 mb-6 font-medium text-center">游戏规则：找出英文卡片对应的中文意思。全部找对即可过关！</p>
+        <div id="gameGrid" class="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 w-full max-w-5xl perspective-1000"></div>
+        <div id="victoryMessage" class="hidden mt-8 flex-col items-center animate-bounce">
+            <div class="text-5xl mb-2">🏆 🎉 ✨</div>
+            <h3 class="text-2xl font-black text-green-600">太棒了！你找出了本关所有生词！</h3>
+        </div>
+    </div>
+
+    <div id="viewBook" class="w-full max-w-6xl hidden flex-col lg:flex-row bg-white rounded-3xl shadow-lg border-4 border-green-300 overflow-hidden" style="min-height: 650px;">
+        <div class="w-full lg:w-2/5 bg-gray-900 flex flex-col items-center justify-center p-8 border-b-4 lg:border-b-0 lg:border-r-4 border-dashed border-green-200 relative overflow-hidden">
+            <div class="absolute inset-0 bg-green-900 opacity-20"></div>
+            <h2 id="pageTitle" class="text-3xl font-black text-white mb-6 tracking-wide text-center z-10 drop-shadow-md"></h2>
+            
+            <div class="w-full h-72 md:h-96 rounded-2xl shadow-2xl border-4 border-white overflow-hidden relative z-10 bg-black flex items-center justify-center">
+                <div id="imgLoader" class="absolute text-white flex flex-col items-center z-10">
+                    <i class="fa-solid fa-spinner fa-spin text-4xl mb-2"></i>
+                    <span class="text-sm font-bold">高清图片加载中...</span>
+                </div>
+                <img id="pageImage" src="" alt="Insect" class="w-full h-full object-cover transition-opacity duration-500 opacity-0 relative z-20">
+            </div>
+        </div>
+        
+        <div class="w-full lg:w-3/5 p-8 md:p-12 flex flex-col relative bg-[#fafaf9]">
+            <div class="flex justify-between items-center mb-8 shrink-0">
+                <span id="pageIndicator" class="font-black text-white bg-green-500 px-5 py-2 rounded-xl shadow-sm text-lg">P.4</span>
+                <button onclick="playFullPage()" class="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-md transition transform hover:scale-105 flex items-center text-lg">
+                    <i class="fa-solid fa-volume-high mr-2"></i> 朗读本页
+                </button>
+            </div>
+            
+            <div class="flex-grow flex flex-col justify-center">
+                <div id="pageText" class="book-text-content"></div>
+            </div>
+
+            <div class="flex justify-between mt-10 shrink-0">
+                <button id="prevBtn" onclick="changePage(-1)" class="bg-white border-2 border-gray-200 text-gray-700 px-8 py-3 rounded-full font-bold shadow-sm hover:bg-gray-50 transition text-lg"><i class="fa-solid fa-arrow-left mr-2"></i> 上一页</button>
+                <button id="nextBtn" onclick="changePage(1)" class="bg-green-500 border-2 border-green-500 text-white px-8 py-3 rounded-full font-bold shadow-md hover:bg-green-600 transition text-lg">下一页 <i class="fa-solid fa-arrow-right ml-2"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast" class="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-yellow-400 text-yellow-900 border-4 border-white px-10 py-6 rounded-3xl shadow-2xl opacity-0 pointer-events-none z-50 flex flex-col items-center">
+        <span id="toastWord" class="text-4xl font-black mb-2"></span>
+        <span id="toastMeaning" class="text-2xl font-bold"></span>
+    </div>
+
+    <script>
+        // 动态 Emoji SVG 生成器 (终极保底方案)
+        function getSvgImage(emoji, bgColor) {
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="600" viewBox="0 0 600 600">
+                <rect width="600" height="600" fill="${bgColor}"/>
+                <text x="50%" y="50%" font-size="250" text-anchor="middle" dominant-baseline="middle">${emoji}</text>
+            </svg>`;
+            return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+        }
+
+        const vocabData = [
+            { word: "extreme", pos: "adj.", meaning: "极端的", emoji: "🔥", example: "" },
+            { word: "in danger", pos: "phrase", meaning: "处于危险中", emoji: "⚠️", example: "Insects are always in danger." },
+            { word: "each other", pos: "pron.", meaning: "彼此", emoji: "🤝", example: "They are food for each other." },
+            { word: "as well as", pos: "phrase", meaning: "也，以及", emoji: "➕", example: "They eat plants as well as bugs." },
+            { word: "enemy", pos: "n.", meaning: "敌人", emoji: "🦹", example: "" },
+            { word: "stay alive", pos: "phrase", meaning: "活下去", emoji: "❤️", example: "Traits help them stay alive." },
+            { word: "trait", pos: "n.", meaning: "特征，特点", emoji: "✨", example: "" },
+            { word: "weapon", pos: "n.", meaning: "武器", emoji: "⚔️", example: "" },
+            { word: "protect ... from", pos: "phrase", meaning: "保护...免受", emoji: "🛡️", example: "A cover protects it from enemies." },
+            { word: "frighten away", pos: "phrase", meaning: "把...吓跑", emoji: "👻", example: "Its size frightens insects away." },
+            { word: "scare away", pos: "phrase", meaning: "吓跑", emoji: "😱", example: "Fake eyes scare hungry animals away." },
+            { word: "hide from", pos: "phrase", meaning: "躲避", emoji: "🫣", example: "They hide from animals." },
+            { word: "look-alike", pos: "n.", meaning: "长得像的东西", emoji: "🎭", example: "" },
+            { word: "fake", pos: "adj.", meaning: "假的", emoji: "🤥", example: "Insects have fake eyes." },
+            { word: "survive", pos: "v.", meaning: "生存", emoji: "🌱", example: "" },
+            { word: "keep from", pos: "phrase", meaning: "阻止发生", emoji: "🛑", example: "It keeps them from becoming food." },
+            { word: "trap", pos: "v./n.", meaning: "困住/陷阱", emoji: "🕸️", example: "It traps ants in the pit." },
+            { word: "deadly", pos: "adj.", meaning: "致命的", emoji: "☠️", example: "The beak makes it deadly." },
+            { word: "shoot out", pos: "phrase", meaning: "射出", emoji: "🔫", example: "It shoots out poison." },
+            { word: "poison", pos: "n.", meaning: "毒液", emoji: "🧪", example: "" },
+            { word: "turn A to B", pos: "phrase", meaning: "把A变B", emoji: "🪄", example: "It turns their insides to goo." },
+            { word: "spray", pos: "v./n.", meaning: "喷射", emoji: "🚿", example: "The beetle's spray keeps enemies away." },
+            { word: "boiling hot", pos: "adj.", meaning: "滚烫的", emoji: "♨️", example: "It sprays boiling hot poison." },
+            { word: "prey", pos: "n.", meaning: "猎物", emoji: "🐛", example: "Ambush bugs catch their prey." }
+        ];
+
+        // 净化版 AI 提示词（去除所有触发安全过滤的词汇，替换为安全的自然描述）
+        function getAiImage(safePrompt) {
+            return `https://image.pollinations.ai/prompt/${encodeURIComponent(safePrompt)}?width=800&height=800&nologo=true`;
+        }
+
+        const bookData = [
+            {
+                page: "Page 4", title: "Introduction", emoji: "🦟",
+                img: getAiImage("A realistic robber fly resting on a green leaf, stunning macro nature photography, high detail"),
+                text: "<p>Insects are always <span class='vocab-word' onclick=\"popWord('in danger', '处于危险中')\">in danger</span>. They have many <span class='vocab-word' onclick=\"popWord('enemy', '敌人')\">enemies</span>.</p><p>They are food for <span class='vocab-word' onclick=\"popWord('each other', '彼此')\">each other</span> <span class='vocab-word' onclick=\"popWord('as well as', '也，以及')\">as well as</span> other animals.</p>"
+            },
+            {
+                page: "Page 5", title: "Traits", emoji: "✨",
+                img: getAiImage("A realistic peanut-head bug insect resting on a tree bark, macro photography, 4k"),
+                text: "<p>Insects have many <span class='vocab-word' onclick=\"popWord('trait', '特征，特点')\">traits</span> that help them <span class='vocab-word' onclick=\"popWord('stay alive', '活下去')\">stay alive</span>.</p><p>These <span class='vocab-word' onclick=\"popWord('trait', '特征')\">traits</span> include size, looks, and <span class='vocab-word' onclick=\"popWord('weapon', '武器')\">weapons</span>.</p><p>Let's look at some of the <span class='vocab-word' onclick=\"popWord('extreme', '极端的')\">extreme</span> traits insects have.</p>"
+            },
+            {
+                page: "Page 6", title: "Goliath Beetle", emoji: "🪲",
+                img: getAiImage("A giant goliath beetle resting on a green leaf, highly detailed macro photography"),
+                text: "<p><span class='vocab-word' onclick=\"popWord('extreme', '极端的')\">Extreme</span> Size. This beetle can grow as long as a pen.</p><p>It can weigh as much as a banana.</p><p>Extreme size and a hard cover <span class='vocab-word' onclick=\"popWord('protect ... from', '保护...免受')\">protect it from</span> its <span class='vocab-word' onclick=\"popWord('enemy', '敌人')\">enemies</span>.</p>"
+            },
+            {
+                page: "Page 7", title: "Walking Stick", emoji: "🌿",
+                img: getAiImage("A giant walking stick insect camouflaged on a branch, realistic nature photography"),
+                text: "<p>This insect can grow longer than a new pencil.</p><p>Its size <span class='vocab-word' onclick=\"popWord('frighten away', '把...吓跑')\">frightens smaller insects away</span>.</p><p>Animals don't eat it because they think it is just a big stick.</p>"
+            },
+            {
+                page: "Page 8", title: "Trash Bug", emoji: "🗑️",
+                img: getAiImage("A tiny green lacewing larva carrying natural debris on its back, macro photography"),
+                text: "<p><span class='vocab-word' onclick=\"popWord('extreme', '极端的')\">Extreme</span> <span class='vocab-word' onclick=\"popWord('look-alike', '伪装物')\">Look-Alikes</span>.</p><p>Trash bugs carry leftovers on their backs to <span class='vocab-word' onclick=\"popWord('hide from', '躲避')\">hide from</span> animals that might eat them.</p>"
+            },
+            {
+                page: "Page 10", title: "Caterpillar", emoji: "🐛",
+                img: getAiImage("A sphinx moth caterpillar with large eye spots looking like a small snake, macro photography"),
+                text: "<p>There are insects with large <span class='vocab-word' onclick=\"popWord('fake', '假的')\">fake</span> eyes to <span class='vocab-word' onclick=\"popWord('scare away', '吓跑')\">scare hungry animals away</span>.</p><p>When scared, this caterpillar can make itself look like a snake.</p>"
+            },
+            {
+                page: "Page 11", title: "Ambush Bug", emoji: "🌺",
+                img: getAiImage("A colorful ambush bug hiding perfectly on a bright yellow flower, macro photography"),
+                text: "<p><span class='vocab-word' onclick=\"popWord('extreme', '极端的')\">Extreme</span> <span class='vocab-word' onclick=\"popWord('weapon', '武器')\">Weapons</span>. Some insects have extreme weapons to help them <span class='vocab-word' onclick=\"popWord('survive', '生存')\">survive</span>.</p><p>Others use their weapons to <span class='vocab-word' onclick=\"popWord('keep from', '阻止某事发生')\">keep from becoming</span> food.</p>"
+            },
+            {
+                page: "Page 13", title: "Assassin Bug", emoji: "🥷",
+                img: getAiImage("A colorful reduviidae insect resting on a green leaf, stunning nature macro photography"),
+                text: "<p>The assassin bug's beak makes it <span class='vocab-word' onclick=\"popWord('deadly', '致命的')\">deadly</span>.</p><p>It jumps on other insects.</p><p>It <span class='vocab-word' onclick=\"popWord('shoot out', '射出')\">shoots out</span> <span class='vocab-word' onclick=\"popWord('poison', '毒液')\">poison</span> that <span class='vocab-word' onclick=\"popWord('turn A to B', '把A变B')\">turns their insides to goo</span>.</p>"
+            },
+            {
+                page: "Page 14", title: "Bombardier Beetle", emoji: "💣",
+                img: getAiImage("A brachinus insect walking on the ground, realistic nature photography"),
+                text: "<p>The bombardier beetle's <span class='vocab-word' onclick=\"popWord('spray', '喷射')\">spray</span> keeps enemies away.</p><p>Watch out! This beetle <span class='vocab-word' onclick=\"popWord('spray', '喷射')\">sprays</span> out <span class='vocab-word' onclick=\"popWord('boiling hot', '滚烫的')\">boiling hot</span> <span class='vocab-word' onclick=\"popWord('poison', '毒液')\">poison</span> when touched.</p>"
+            },
+            {
+                page: "Page 15", title: "Conclusion", emoji: "🐜",
+                img: getAiImage("A macro shot of a small insect resting on a colorful flower petal, beautiful nature shot"),
+                text: "<p>Ambush bugs hide near flowers to catch their <span class='vocab-word' onclick=\"popWord('prey', '猎物')\">prey</span>.</p><p>Insects have many ways to protect themselves.</p>"
+            }
+        ];
+
+        let voices = [];
+        let femaleVoice = null;
+        
+        function loadVoices() {
+            voices = window.speechSynthesis.getVoices();
+            femaleVoice = voices.find(voice => 
+                voice.lang.includes('en') && (voice.name.includes('Female') || voice.name.includes('Woman') || voice.name.includes('Samantha') || voice.name.includes('Google US English'))
+            );
+            if (!femaleVoice) femaleVoice = voices.find(voice => voice.lang.includes('en-US')) || voices[0];
+        }
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+
+        function playAudio(text) {
+            window.speechSynthesis.cancel();
+            if (voices.length === 0) loadVoices(); 
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.voice = femaleVoice;
+            utterance.lang = 'en-US';
+            utterance.rate = 0.75; 
+            utterance.pitch = 1.1; 
+            window.speechSynthesis.speak(utterance);
+        }
+
+        function flipCard(element) {
+            const innerCard = element.querySelector('.inner-card');
+            innerCard.classList.toggle('rotate-y-180');
+        }
+
+        let toastTimeout;
+        function popWord(word, meaning) {
+            playAudio(word);
+            const toast = document.getElementById('toast');
+            document.getElementById('toastWord').innerText = word;
+            document.getElementById('toastMeaning').innerText = meaning;
+            
+            toast.style.opacity = '1';
+            toast.style.transform = 'translate(-50%, -50%) scale(1.1)';
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%, -50%) scale(0.9)';
+            }, 2500);
+        }
+
+        function renderVocab() {
+            const grid = document.getElementById('vocabGrid');
+            grid.innerHTML = '';
+            vocabData.forEach(v => {
+                let badgeColor = v.pos === 'phrase' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700';
+                grid.innerHTML += `
+                    <div class="perspective-1000 w-full h-48 md:h-56 cursor-pointer" onclick="flipCard(this)">
+                        <div class="inner-card relative w-full h-full transition-transform duration-500 transform-style-3d">
+                            <div class="absolute w-full h-full bg-white rounded-3xl shadow-sm border-b-4 border-green-200 flex flex-col items-center justify-center backface-hidden">
+                                <span class="font-black text-2xl text-gray-800 text-center px-4">${v.word}</span>
+                                <span class="mt-3 text-sm font-black px-4 py-1 rounded-full ${badgeColor}">${v.pos}</span>
+                            </div>
+                            <div class="absolute w-full h-full bg-green-100 rounded-3xl shadow-md border-b-4 border-green-400 flex flex-col items-center justify-center backface-hidden rotate-y-180 px-4 text-center">
+                                <div class="text-4xl mb-2">${v.emoji}</div>
+                                <div class="text-green-900 font-bold text-xl">${v.meaning}</div>
+                                <button onclick="playAudio('${v.word.replace(/'/g, "\\'")}'); event.stopPropagation();" class="mt-4 bg-white text-green-600 w-12 h-12 rounded-full flex items-center justify-center hover:bg-green-500 hover:text-white transition shadow-sm text-xl">
+                                    <i class="fa-solid fa-volume-high"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        let currentPage = 0;
+        function renderBook() {
+            const data = bookData[currentPage];
+            document.getElementById('pageIndicator').innerText = data.page;
+            document.getElementById('pageTitle').innerText = data.title;
+            
+            const imgEl = document.getElementById('pageImage');
+            const loader = document.getElementById('imgLoader');
+            
+            // 重置状态
+            imgEl.style.opacity = '0';
+            loader.style.display = 'flex';
+            
+            // 绑定防转圈事件：加载成功隐藏 loader；加载失败直接换 Emoji SVG
+            imgEl.onload = function() {
+                this.style.opacity = '1';
+                loader.style.display = 'none';
+            };
+            imgEl.onerror = function() {
+                this.onerror = null; // 防止无限循环
+                this.src = getSvgImage(data.emoji, "#1e293b"); // 使用带当前动物 Emoji 的深色背景
+                this.style.opacity = '1';
+                loader.style.display = 'none';
+            };
+
+            // 触发图片加载
+            setTimeout(() => { imgEl.src = data.img; }, 100);
+            
+            document.getElementById('pageText').innerHTML = data.text;
+
+            document.getElementById('prevBtn').disabled = currentPage === 0;
+            document.getElementById('prevBtn').style.opacity = currentPage === 0 ? '0.3' : '1';
+            document.getElementById('nextBtn').disabled = currentPage === bookData.length - 1;
+            document.getElementById('nextBtn').style.opacity = currentPage === bookData.length - 1 ? '0.3' : '1';
+            
+            window.speechSynthesis.cancel();
+        }
+
+        function changePage(dir) {
+            currentPage += dir;
+            if (currentPage < 0) currentPage = 0;
+            if (currentPage >= bookData.length) currentPage = bookData.length - 1;
+            renderBook();
+        }
+
+        function playFullPage() {
+            const tempDiv = document.createElement("div");
+            tempDiv.innerHTML = bookData[currentPage].text;
+            playAudio(tempDiv.textContent || tempDiv.innerText);
+        }
+
+        let firstCard = null, secondCard = null, lockBoard = false, matches = 0;
+        const pairsPerLevel = 12; 
+        let currentLevel = 1;
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function initGame(level) {
+            currentLevel = level || 1;
+            
+            if(currentLevel === 1) {
+                document.getElementById('btnLevel1').className = "bg-yellow-500 text-white px-4 py-2 rounded-full font-bold shadow-sm transition";
+                document.getElementById('btnLevel2').className = "bg-transparent text-gray-500 hover:text-gray-700 px-4 py-2 rounded-full font-bold transition";
+            } else {
+                document.getElementById('btnLevel1').className = "bg-transparent text-gray-500 hover:text-gray-700 px-4 py-2 rounded-full font-bold transition";
+                document.getElementById('btnLevel2').className = "bg-yellow-500 text-white px-4 py-2 rounded-full font-bold shadow-sm transition";
+            }
+
+            const grid = document.getElementById('gameGrid');
+            grid.innerHTML = '';
+            matches = 0;
+            document.getElementById('matchCount').innerText = matches;
+            document.getElementById('victoryMessage').classList.add('hidden');
+            
+            let levelVocab = currentLevel === 1 ? vocabData.slice(0, 12) : vocabData.slice(12, 24);
+            let gameCards = [];
+            
+            levelVocab.forEach((v, index) => {
+                gameCards.push({ id: index, type: 'en', content: v.word, word: v.word });
+                gameCards.push({ id: index, type: 'zh', content: `${v.emoji} <br> <span class="text-sm">${v.meaning}</span>`, word: v.word });
+            });
+            
+            gameCards = shuffle(gameCards);
+            
+            gameCards.forEach(card => {
+                const cardEl = document.createElement('div');
+                cardEl.className = "memory-card w-full h-24 md:h-32 cursor-pointer transform-style-3d perspective-1000 relative";
+                cardEl.dataset.id = card.id;
+                cardEl.dataset.word = card.word;
+                cardEl.dataset.type = card.type;
+                
+                cardEl.innerHTML = `
+                    <div class="absolute w-full h-full bg-yellow-200 rounded-xl border-4 border-yellow-300 flex items-center justify-center backface-hidden shadow-sm hover:bg-yellow-300 transition text-yellow-500 text-3xl">
+                        <i class="fa-solid fa-question"></i>
+                    </div>
+                    <div class="absolute w-full h-full bg-white rounded-xl border-4 border-yellow-400 flex flex-col items-center justify-center backface-hidden rotate-y-180 shadow-md text-center p-1 font-bold text-gray-800 ${card.type === 'en' ? 'text-sm md:text-base' : 'text-xs md:text-sm'}">
+                        ${card.content}
+                    </div>
+                `;
+                
+                cardEl.addEventListener('click', flipGameCard);
+                grid.appendChild(cardEl);
+            });
+        }
+
+        function flipGameCard() {
+            if (lockBoard) return;
+            if (this === firstCard) return;
+
+            this.classList.add('flipped');
+            if(this.dataset.type === 'en') { playAudio(this.dataset.word); }
+
+            if (!firstCard) { firstCard = this; return; }
+            secondCard = this;
+            checkForMatch();
+        }
+
+        function checkForMatch() {
+            let isMatch = firstCard.dataset.id === secondCard.dataset.id;
+            if (isMatch) { playAudio("Great!"); disableCards(); } 
+            else { unflipCards(); }
+        }
+
+        function disableCards() {
+            setTimeout(() => {
+                firstCard.classList.add('matched');
+                secondCard.classList.add('matched');
+                resetBoard();
+                
+                matches++;
+                document.getElementById('matchCount').innerText = matches;
+                if(matches === pairsPerLevel) {
+                    playAudio("Congratulations!");
+                    document.getElementById('victoryMessage').classList.remove('hidden');
+                    document.getElementById('victoryMessage').classList.add('flex');
+                }
+            }, 600);
+        }
+
+        function unflipCards() {
+            lockBoard = true;
+            setTimeout(() => {
+                firstCard.classList.remove('flipped');
+                secondCard.classList.remove('flipped');
+                resetBoard();
+            }, 1200);
+        }
+
+        function resetBoard() { [firstCard, secondCard, lockBoard] = [null, null, false]; }
+
+        function switchTab(tab) {
+            window.speechSynthesis.cancel();
+            
+            const views = { 'vocab': document.getElementById('viewVocab'), 'game': document.getElementById('viewGame'), 'book': document.getElementById('viewBook') };
+            const tabs = { 'vocab': document.getElementById('tabVocab'), 'game': document.getElementById('tabGame'), 'book': document.getElementById('tabBook') };
+            
+            Object.keys(views).forEach(key => {
+                views[key].classList.add('hidden');
+                views[key].classList.remove('flex');
+                tabs[key].classList.remove('tab-active', 'scale-105');
+                tabs[key].classList.add('tab-inactive');
+            });
+            
+            if(tab === 'book' || tab === 'game') {
+                views[tab].classList.remove('hidden');
+                views[tab].classList.add('flex');
+            } else { views[tab].classList.remove('hidden'); }
+            
+            tabs[tab].classList.remove('tab-inactive');
+            tabs[tab].classList.add('tab-active', 'scale-105');
+            
+            if(tab === 'game') { initGame(currentLevel); }
+        }
+
+        window.onload = () => { loadVoices(); renderVocab(); renderBook(); initGame(1); };
+    </script>
+</body>
+</html>
